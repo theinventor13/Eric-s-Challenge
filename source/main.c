@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 typedef unsigned short int uint16;
 typedef unsigned long long int uint64;
@@ -20,7 +22,9 @@ typedef struct{
 memory buffer;
 size_t pc = 0;
 size_t bytesloaded = 0;
-
+inputtimes = 0;
+char input[8] = {'d', 'o', 'o', 'r', 'w', 'a', 'y', '\n'};
+void dojump(void);
 bool isregister(uint16 address);
 uint16 getliteral(uint16 val);
 uint16 getregister(uint16 reg);
@@ -39,7 +43,7 @@ int main(void){
 	uint16 temp;
 	
 	FILE * binary;
-	binary = fopen("challenge.bin", "r");
+	binary = fopen("challenge.bin", "rb");
 	if(binary == NULL){
 		printf("you suck ass\n");
 		return 0;
@@ -47,8 +51,12 @@ int main(void){
 	stack.current = 0;
 	stack.sizecap = 1024;
 	stack.vals = (uint16 *)malloc(sizeof(uint16) * stack.sizecap);
-	memset(buffer.byte, 0, (1 << 16) + (1 << 4));
-	while(bytesloaded < (1 << 16)){
+
+	fseek( binary , 0L , SEEK_END);
+	int F_SIZE = ftell( binary );
+	rewind( binary );
+	memset(buffer.byte, 0, F_SIZE);
+	while(bytesloaded < F_SIZE){
 		buffer.byte[bytesloaded] = getc(binary);
 		bytesloaded++;
 	}
@@ -231,11 +239,14 @@ int main(void){
 				pc++;
 				break;	
 			case 20:
-				printf("IN\n");
-				pc+=2;
+				//IN
+				pc++;
+				buffer.instr[buffer.instr[pc]] = getchar();
+				inputtimes++;
+				pc++;
 				break;
 			case 21:
-				printf("NOP\n");
+				//printf("NOP\n");
 				//NOP
 				pc++;
 				break;
