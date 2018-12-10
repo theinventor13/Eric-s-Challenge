@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <string.h>
 
 typedef unsigned short int uint16;
 typedef unsigned long long int uint64;
@@ -12,6 +11,8 @@ typedef struct{
 	uint64 sizecap;
 }buildastack;
 
+buildastack stack;
+
 typedef struct{
 	union thing{
 		char byte[(1 << 16) + (1 << 4)];	
@@ -20,194 +21,182 @@ typedef struct{
 }memory;
 
 memory buffer;
+
 size_t pc = 0;
 size_t bytesloaded = 0;
-inputtimes = 0;
-char input[8] = {'d', 'o', 'o', 'r', 'w', 'a', 'y', '\n'};
-void dojump(void);
-bool isregister(uint16 address);
-uint16 getliteral(uint16 val);
-uint16 getregister(uint16 reg);
+
 void putregister(uint16 reg, uint16 val);
-void incrementpc(void);
 void steppc(uint16 advance);
 void setpc(uint16 address);
-uint16 getval(uint16 address);
+void incrementpc(void);
+void dojump(void);
 void dumpregisters(void);
 void dumpstack(void);
-buildastack stack;
+bool isregister(uint16 address);
+bool stackmin(void);
+bool stackmax(void);
+void pushstack(uint16 val);
+void growstack(void);
+uint16 popstack(void);
+uint16 getliteral(uint16 val);
+uint16 getregister(uint16 reg);
+uint16 getval(uint16 address);
 
 int main(void){
-	
-	
-	uint16 temp;
 	
 	FILE * binary;
 	binary = fopen("challenge.bin", "rb");
 	if(binary == NULL){
-		printf("you suck ass\n");
+		printf("COULD NOT LOAD BINARY\n");
 		return 0;
 	}
+	
 	stack.current = 0;
 	stack.sizecap = 1024;
 	stack.vals = (uint16 *)malloc(sizeof(uint16) * stack.sizecap);
 
-	fseek( binary , 0L , SEEK_END);
+	fseek(binary , 0L , SEEK_END);
 	int F_SIZE = ftell( binary );
-	rewind( binary );
+	rewind(binary);
 	memset(buffer.byte, 0, F_SIZE);
+	
 	while(bytesloaded < F_SIZE){
 		buffer.byte[bytesloaded] = getc(binary);
 		bytesloaded++;
 	}
 	
-	bool error = false;
+	printf("%u bytes loaded\n\n", bytesloaded);
+	
 	bool halt = false;
 	
 	while(!halt){
 		switch(buffer.instr[pc]){
 			case 0:
 				//HALT
-				printf("HALT %x\n", pc * 2);
 				halt = true;
 				break;
 			case 1:
 				//SET
-				//printf("SET\n");
-				pc++;
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = getval(pc + 1);
-				pc+=2;
+				steppc(2);
 				break;
 			case 2:
 				//PUSH
-				//printf("PUSH\n");
-				pc++;
-				if(stack.current == stack.sizecap){
-					stack.sizecap << 1;
-					stack.vals = (uint16 *)realloc(stack.vals, stack.sizecap);
+				incrementpc();
+				if(stackmax()){
+					growstack();
 				}
-				stack.vals[stack.current] = getval(pc);
-				stack.current++;
-				pc++;
+				pushstack(getval(pc));
+				incrementpc();
 				break;
 			case 3:
 				//POP
-				//printf("POP\n");
-				if(stack.current == 0){
+				if(stackmin()){
 					printf("CANT POP\n");
-					pc++;pc++;
+					halt = true;
 					break;
 				}
-				pc++;
-				stack.current--;
-				buffer.instr[buffer.instr[pc]] = stack.vals[stack.current];
-				pc++;
+				incrementpc();
+				buffer.instr[buffer.instr[pc]] = popstack();
+				incrementpc();
 				break;
 			case 4:
 				//EQ
-				//printf("%hx: EQ\n", pc << 1);
-				pc++;
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = (getval(pc+1) == getval(pc+2));
-				pc+=3;
+				steppc(3);
 				break;
 			case 5:
 				//GT
-				//printf("GT\n");
-				pc++;
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = (getval(pc+1) > getval(pc+2));
-				pc+=3;
+				steppc(3);
 				break;
 			case 6:
 				//JMP
-				//printf("JMP %x\n", pc * 2);
 				incrementpc();
 				dojump();
 				break;
 			case 7:
 				//JT
-				//printf("%x: JT ", pc * 2);
 				if(getval(pc+1)){
 					steppc(2);
 					dojump();
 				}else{
 					steppc(3);
 				}
-				//printf("%x\n", pc * 2);
 				break;
 			case 8:
 				//JF
-				//printf("%x: JF ", pc * 2);
 				if(!getval(pc+1)){
 					steppc(2);
 					dojump();
 				}else{
 					steppc(3);
 				}
-				//printf("%x\n", pc * 2);
 				break;
 			case 9:
 				//ADD
-				//printf("ADD\n");
-				pc++;
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = getval(pc+1) + getval(pc+2);
 				buffer.instr[buffer.instr[pc]] &= 0x7FFF;
-				pc+=3;
+				steppc(3);
 				break;
 			case 10:
 				//MULT
-				//printf("MULT\n");
-				pc++;
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = getval(pc+1) * getval(pc+2);
 				buffer.instr[buffer.instr[pc]] &= 0x7FFF;
-				pc+=3;
+				steppc(3);
 				break;
 			case 11:
-				//printf("MOD\n");
-				pc++;
+				//MOD
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = getval(pc+1) % getval(pc+2);
 				buffer.instr[buffer.instr[pc]] &= 0x7FFF;
-				pc+=3;
+				steppc(3);
 				break;
 			case 12:
-				//printf("AND\n");
-				pc++;
+				//AND
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = getval(pc+1) & getval(pc+2);
 				buffer.instr[buffer.instr[pc]] &= 0x7FFF;
-				pc+=3;
+				steppc(3);
 				break;
 			case 13:
-				//printf("OR\n");
-				pc++;
+				//OR
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = getval(pc+1) | getval(pc+2);
 				buffer.instr[buffer.instr[pc]] &= 0x7FFF;
-				pc+=3;
+				steppc(3);
 				break;
 			case 14:
-				//printf("NOT\n");
-				pc++;
+				//NOT
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = ~(getval(pc+1));
 				buffer.instr[buffer.instr[pc]] &= (uint16)0x7FFF;
-				pc+=2;
+				steppc(2);
 				break;
 			case 15:
-				//printf("%x: RMEM\n", pc << 1);
-				pc++;
+				//RMEM
+				incrementpc();
 				if(isregister(buffer.instr[pc + 1])){
 					buffer.instr[buffer.instr[pc]] = buffer.instr[buffer.instr[buffer.instr[pc + 1]]];
 				}else{
 					buffer.instr[buffer.instr[pc]] = buffer.instr[buffer.instr[pc + 1]];
 				}
-				pc+=2;
+				steppc(2);
 				break;
 			case 16:
-				//printf("WMEM\n");
-				pc++;
+				//WMEM
+				incrementpc();
 				buffer.instr[getval(pc)] = getval(pc + 1);
-				pc+=2;
+				steppc(2);
 				break;
 			case 17:
-				//printf("CALL\n");
-				pc++;
+				//CALL
+				incrementpc();
 				if(stack.current == stack.sizecap){
 					stack.sizecap << 1;
 					stack.vals = (uint16 *)realloc(stack.vals, stack.sizecap);
@@ -217,11 +206,11 @@ int main(void){
 				pc = getval(pc);
 				break;
 			case 18:
-				//printf("RET\n");
-				pc++;
+				//RET
+				incrementpc();
 				if(stack.current == 0){
 					printf("CANT POP\n");
-					pc++;
+					halt = true;
 					break;
 				}
 				stack.current--;
@@ -229,34 +218,32 @@ int main(void){
 				break;
 			case 19:
 				//OUT
-				pc++;
+				incrementpc();
 				if(isregister(buffer.instr[pc])){
-					temp = buffer.instr[buffer.instr[pc]];
-					printf("%c", temp);
+					printf("%c", buffer.instr[buffer.instr[pc]]);
 				}else{
 					printf("%c", buffer.byte[(pc << 1)]);
 				}
-				pc++;
+				incrementpc();
 				break;	
 			case 20:
 				//IN
-				pc++;
+				incrementpc();
 				buffer.instr[buffer.instr[pc]] = getchar();
-				inputtimes++;
-				pc++;
+				incrementpc();
 				break;
 			case 21:
-				//printf("NOP\n");
 				//NOP
-				pc++;
+				incrementpc();
 				break;
 			default:
-				printf("LIT VAL\n");
-				pc++;
+				//INVALID
+				printf("ENCOUNTERED INVALID OPCODE\n");
+				halt = true;
 				break;
 		}
 	}
-	//dumpmem();
+	
 	printf("EXECUTION HALT");
 	return 0;
 }
@@ -310,24 +297,26 @@ void dojump(void){
 	}
 }
 
-void dumpregisters(void){
-	for(size_t iter = 0; iter < 8; iter++){
-		printf("register %i: %u\n", iter, buffer.instr[(1 << 15) + iter]);
-	}
+void pushstack(uint16 val){
+	stack.vals[stack.current] = val;
+	stack.current++;
 }
 
-void dumpstack(void){
-	for(int iter = stack.current; iter >= 0; iter--){
-		printf("at %i: %hu\n", iter, stack.vals[iter]);
-	}
+uint16 popstack(void){
+	stack.current--;
+	return stack.vals[stack.current];	
 }
 
-void dumpmem(void){
-	for(size_t iter = 0; iter < bytesloaded; iter++){
-		printf("%02hhx\t", (unsigned char)buffer.byte[iter]);
-		if(!(iter % 16)){
-			printf("\n");
-		}
-	}
+bool stackmin(void){
+	return stack.current == 0;
+}
+
+bool stackmax(void){
+	return stack.current == stack.sizecap;
+}
+
+void growstack(void){
+	stack.sizecap << 1;
+	stack.vals = (uint16 *)realloc(stack.vals, stack.sizecap);
 }
 
